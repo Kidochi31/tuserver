@@ -21,11 +21,11 @@ def main():
         pass
     stun_socket.bind(('', 0))
 
-    external_ip, external_port = get_ip_info(stun_socket, [("stun.ekiga.net", 3478)])
-    if external_ip is None or external_port is None:
+    ip_result = get_ip_info(stun_socket, [("stun.ekiga.net", 3478)])
+    if ip_result is None:
         print("STUN failed")
         exit()
-
+    external_ip, external_port = ip_result
     print(f"ExternalAddress: {external_ip}:{external_port}")
     print(f"LocalAddress: {stun_socket.getsockname()}")
 
@@ -93,7 +93,7 @@ def main():
     wait_for_socket.wait()
     stop_threads.set()
 
-    connection :socket.socket = None
+    connection :socket.socket | None = None
 
     if accepted_socket is None:
         print("Connected with connect_socket")

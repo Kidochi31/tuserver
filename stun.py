@@ -20,12 +20,14 @@ def stun_response_valid(bytes: bytes, transaction_id: bytes) -> bool:
     return received_transaction_id == transaction_id
 
 # returns the external ip address and port number of the socket
-def get_stun_response(sock: socket, addr: tuple[str, int], max_timeouts: int) -> tuple[IPv4Address | IPv6Address, int]:
+def get_stun_response(sock: socket, addr: tuple[str, int], max_timeouts: int) -> tuple[str, int]:
     timeouts = 0
     while True:
         try:
             transaction_id = send_stun_request(sock, addr)
-            data = sock.recv(2048)
+            data, endpoint = sock.recvfrom(2048)
+            if endpoint != addr: # ignore all other messages
+                continue
             if not stun_response_valid(data, transaction_id):
                 raise timeout # timeout if invalid response
             
@@ -45,19 +47,20 @@ def get_stun_response(sock: socket, addr: tuple[str, int], max_timeouts: int) ->
             if type == b'\x00\x01': # MAPPED-ADDRESS
                 family = value[1]
                 extPort = get_int(value[2:4])
-                extAddress = IPv4Address(value[4:8]) if family == 0x01 else IPv6Address(value[4:20]) #0x02
+                extAddress = IPv4Address(value[4:8]).compressed if family == 0x01 else IPv6Address(value[4:20]).compressed #0x02
                 return (extAddress, extPort)
         raise gaierror # could not find the address
     
 
 # Get the network topology, external IP, and external port
-def get_ip_info(sock: socket, stun_hosts: list[(str, int)], max_timeouts: int =5) -> tuple[IPv4Address | IPv6Address | None, int | None]:
+def get_ip_info(sock: socket, stun_hosts: list[tuple[str, int]], max_timeouts: int =5) -> tuple[str, int] | None: 
     old_timeout = sock.gettimeout()
     sock.settimeout(0.5)
-    response = (None, None)
+    response = None
 
     for stun_addr in stun_hosts:
         try:
+            stun_addr = gethostbyname(stun_addr[0]), stun_addr[1]
             response = get_stun_response(sock, stun_addr, max_timeouts)
             break
         except Exception:  # host not found, or timeout
