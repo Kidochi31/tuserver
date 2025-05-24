@@ -21,7 +21,7 @@ def main():
     server = Server(on_connect, on_hole_punch_fail, on_receive_reliable, on_receive_unreliable, on_disconnect, stun_hosts)
     
     print(f"ExternalAddress: {server.get_external_endpoint()}")
-    print(f"LANAddress: {server.get_lan_endpoint()}")
+    print(f"LANAddress: {server.get_lan_endpoints()}")
     print(f"LoopbackAddress: {server.get_loopback_endpoint()}")
 
     def tick_func():

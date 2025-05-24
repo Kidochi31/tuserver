@@ -67,9 +67,14 @@ class Server:
     def get_loopback_endpoint(self) -> endpoint:
         return ('127.0.0.1', self.local_endpoint[1])
     
-    def get_lan_endpoint(self) -> endpoint:
-        address = getaddrinfo(gethostname(), None, family=AF_INET)[0][4][0]
-        return (str(address), self.local_endpoint[1])
+    def get_lan_endpoints(self) -> list[endpoint]:
+        infos = getaddrinfo(gethostname(), None, family=AF_INET, proto=IPPROTO_TCP, type=SOCK_STREAM)[0]
+        endpoints = []
+        for info in infos:
+            endpoint = (str(infos[4][0]), self.local_endpoint[1])
+            if endpoint not in endpoints:
+                endpoints.append(endpoint)
+        return endpoints
 
     def _manage_new_connection(self, socket: socket)-> Connection | None:
         connection = self.connections.add_connection(socket, self.udp_socket)
