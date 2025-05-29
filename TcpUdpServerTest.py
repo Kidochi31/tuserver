@@ -1,7 +1,7 @@
-from tcpudpserver import Server, Connection, endpoint
-from threading import Thread, enumerate
-import time
+from tcpudpserver import *
+from threading import Thread
 import traceback
+from iptools import IP_endpoint
 
 should_quit = None
 
@@ -18,10 +18,10 @@ def main():
 
     stun_hosts = [("stun.ekiga.net", 3478)]
     
-    server = Server(on_connect, on_hole_punch_fail, on_receive_reliable, on_receive_unreliable, on_disconnect, stun_hosts)
+    server = Server(on_connect, on_hole_punch_fail, on_receive_reliable, on_receive_unreliable, on_disconnect, stun_hosts, IPV4)
     
     print(f"ExternalAddress: {server.get_external_endpoint()}")
-    print(f"LANAddress: {server.get_lan_endpoints()}")
+    print(f"LANAddress: {server.get_lan_endpoint()}")
     print(f"LoopbackAddress: {server.get_loopback_endpoint()}")
 
     def tick_func():
@@ -43,7 +43,7 @@ def main():
                 address, port = text.split(":", maxsplit=1)
                 port = int(port)
                 endpoint = (address, port)
-                server.hole_punch(endpoint)
+                server.hole_punch(endpoint, None)
             elif text.startswith("udp "):
                 text = text.removeprefix("udp ")
                 for connection in connections:
@@ -57,13 +57,13 @@ def main():
     
     print("Main Thread Ended")
 
-def on_receive_reliable(server, data: bytes, connection: Connection):
+def on_receive_reliable(server: Server, data: bytes, connection: Connection):
     print(f"from {connection.remote_endpoint}: {data.decode()}")
 
-def on_receive_unreliable(server, data: bytes, connection: Connection):
+def on_receive_unreliable(server: Server, data: bytes, connection: Connection):
     print(f"from {connection.remote_endpoint} via udp: {data.decode()}")
 
-def on_hole_punch_fail(server: Server, endpoint: endpoint):
+def on_hole_punch_fail(server: Server, endpoint: IP_endpoint):
     print(f"failed to hole punch: {endpoint}")
 
 if __name__ == "__main__":

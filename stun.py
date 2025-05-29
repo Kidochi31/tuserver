@@ -1,9 +1,11 @@
-from socket import *
+from socket import socket, timeout, gaierror
 from random import randbytes
 from ipaddress import IPv4Address, IPv6Address
+from iptools import IP_endpoint, unresolved_endpoint
+import iptools
 
 # Send a STUN message to a server, with optional extra data
-def send_stun_request(sock: socket, addr: tuple[str, int]) -> bytes:
+def send_stun_request(sock: socket, addr: IP_endpoint) -> bytes:
     trans_id = randbytes(16)
     message_start = b'\x00\x01\x00\x00' # x0001 is bind msg rqst; 0000 is message length
     sock.sendto(message_start + trans_id, addr)
@@ -20,12 +22,13 @@ def stun_response_valid(bytes: bytes, transaction_id: bytes) -> bool:
     return received_transaction_id == transaction_id
 
 # returns the external ip address and port number of the socket
-def get_stun_response(sock: socket, addr: tuple[str, int], max_timeouts: int) -> tuple[str, int]:
+def get_stun_response(sock: socket, addr: IP_endpoint, max_timeouts: int) -> IP_endpoint:
     timeouts = 0
     while True:
         try:
             transaction_id = send_stun_request(sock, addr)
             data, endpoint = sock.recvfrom(2048)
+            endpoint = iptools.get_canonical_endpoint(endpoint, sock.family)
             if endpoint != addr: # ignore all other messages
                 continue
             if not stun_response_valid(data, transaction_id):
@@ -47,23 +50,29 @@ def get_stun_response(sock: socket, addr: tuple[str, int], max_timeouts: int) ->
             if type == b'\x00\x01': # MAPPED-ADDRESS
                 family = value[1]
                 extPort = get_int(value[2:4])
-                extAddress = IPv4Address(value[4:8]).compressed if family == 0x01 else IPv6Address(value[4:20]).compressed #0x02
-                return (extAddress, extPort)
+                if family == 0x01:
+                    extAddress = IPv4Address(value[4:8]).compressed
+                    return (extAddress, extPort)
+                else: #0x02
+                    extAddress = IPv6Address(value[4:20]).compressed
+                    return (extAddress, extPort, 0, 0)
         raise gaierror # could not find the address
     
 
 # Get the network topology, external IP, and external port
-def get_ip_info(sock: socket, stun_hosts: list[tuple[str, int]], max_timeouts: int =5) -> tuple[str, int] | None: 
+def get_ip_info(sock: socket, stun_hosts: list[unresolved_endpoint], max_timeouts: int =5) -> IP_endpoint | None: 
     old_timeout = sock.gettimeout()
     sock.settimeout(0.5)
     response = None
 
     for stun_addr in stun_hosts:
         try:
-            stun_addr = gethostbyname(stun_addr[0]), stun_addr[1]
-            response = get_stun_response(sock, stun_addr, max_timeouts)
+            endpoint = iptools.resolve_to_canonical_endpoint(stun_addr, sock.family)
+            if endpoint is None:
+                continue
+            response = get_stun_response(sock, endpoint, max_timeouts)
             break
-        except Exception:  # host not found, or timeout
+        except Exception as e:  # host not found, or timeout
             continue
     
     sock.settimeout(old_timeout)
